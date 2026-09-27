@@ -18,12 +18,13 @@ import { sanitizeText } from "@oh-my-pi/pi-utils";
  * Ordinary capabilities refresh before each question; new executions obey live
  * parent revocation/approval. Existing forks never absorb later main messages.
  * Esc back to main hides (keeps running); Ctrl+w closes (cancels dialogs, keeps
- * history); F1 exposes explicit actions, including discard (never rolls back tool effects).
+ * history); the action menu includes discard (never rolls back tool effects).
  * Printable input always belongs to the composer; no empty-input command mode.
  * Native MAIN/SIDE dialogs share FIFO; nested input remains part of its owner.
  * This is conversation isolation, not a sandbox for arbitrary extension code. */
 
 const DEFAULT_MODEL = "@smol";
+const SIDE_MENU = { key: "alt+k", label: "Alt+K" } as const;
 const LEGACY_THREAD = "legacy";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SIDE_PROMPT = [
@@ -893,7 +894,7 @@ function createSideController(metadata: ThreadMetadata, directory: string, turns
 			if (!last) throw new Error("旁路未收到模型回答。");
 			turn.answer = last.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
 			touch(turn).status = "complete";
-			status = "回答完成；可追问，F1 可将选中回答回填 main 草稿";
+			status = "回答完成；可追问，" + SIDE_MENU.label + " 可将选中回答回填 main 草稿";
 		} catch (e) {
 			if (!disposed && current === generation) {
 				turn.status = "error";
@@ -1403,9 +1404,9 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 				const openEntry = (entry: ThreadEntry, isNew: boolean) => {
 					const question = pendingQuestion, spec = pendingSpec;
 					if (question && draftBlocked) {
-						rosterStatus = "角色无效，草稿未发送；F1 选择有效模型角色后再发";
+						rosterStatus = "角色无效，草稿未发送；" + SIDE_MENU.label + " 选择有效模型角色后再发";
 						if (!isNew) { selectedId = entry.id; showRoster = false; rosterFiltering = false; restoreScroll = true;
-							controller(entry).setStatus("角色无效，草稿未发送；回列表用 F1 选择有效模型角色"); }
+							controller(entry).setStatus("角色无效，草稿未发送；回列表用 " + SIDE_MENU.label + " 选择有效模型角色"); }
 						repaint(); return;
 					}
 					const existing = entry.controller;
@@ -1425,7 +1426,7 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 				};
 				const startNew = () => {
 					if (creationPromise) return;
-					if (pendingQuestion && draftBlocked) { rosterStatus = "角色无效，草稿未发送；F1 选择有效模型角色后再发"; repaint(); return; }
+					if (pendingQuestion && draftBlocked) { rosterStatus = "角色无效，草稿未发送；" + SIDE_MENU.label + " 选择有效模型角色后再发"; repaint(); return; }
 					try {
 						// Freeze before the first await, not later when the user submits a question.
 						const captured = takeSnapshot(currentCtx), id = crypto.randomUUID(), created = Date.now();
@@ -1763,7 +1764,7 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 					actionPageSize = Math.min(actions.length, Math.max(1, Math.min(8, height - 2)));
 					const start = Math.min(Math.floor(actionIndex / actionPageSize) * actionPageSize, Math.max(0, actions.length - actionPageSize));
 					const rows: string[] = [];
-					if (height > 2) rows.push(fit(theme.fg("accent", "SIDE 操作 · " + (actionIndex + 1) + "/" + actions.length), width));
+					if (height > 2) rows.push(fit(theme.fg("accent", "SIDE 操作 · " + SIDE_MENU.label + " 开关 · " + (actionIndex + 1) + "/" + actions.length), width));
 					for (let i = start; i < start + actionPageSize; i++) {
 						const item = actions[i]!, on = i === actionIndex;
 						const text = fit((on ? "▌ " : "  ") + theme.fg(item.id === "delete" || item.id === "discard" ? "warning" : "text", item.label), width);
@@ -1815,20 +1816,20 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 						const right: BarSeg[] = [
 							{ text: tokens ? ICON.tokens + " " + tokens : "", fg: "green", drop: 1 },
 							{ text: ICON.dot + " " + short, fg: stateColor(short) },
-							{ text: "F1 操作", fg: "overlay0", drop: 2 },
+							{ text: confirmThread || c?.deleteCandidateId ? "Esc 取消" : aux ? "Esc 返回" : SIDE_MENU.label + " 操作", fg: "overlay0", drop: 2 },
 							{ text: ICON.time + " " + hhmm, fg: "rosewater", drop: 3 },
 						];
 						const hintPairs = (): readonly (readonly [string, string])[] =>
 							confirmThread || c?.deleteCandidateId ? [["y", "删除"], ["Esc/Enter", "取消"]] :
 							aux === "role" ? [["↑/↓", "选择"], ["Enter", "确认"], ["Esc", "返回"]] :
 							aux ? [["↑/↓", "滚动"], ["PgUp/PgDn", "翻页"], ["Esc", "返回"]] :
-							rosterFiltering ? [["Enter", "确认筛选"], ["Esc", "清空"]] :
-							showRoster && loadState === "error" ? [["Enter", "重试"], ["Esc", "返回"]] :
-							showRoster ? [["↑/↓", "选择"], ["Enter", "打开"], ["Del", "丢弃"], ["F1", "操作"], ["Esc", "隐藏"]] :
-							c?.view.page === "history" ? [["↑/↓", "选择"], ["Enter", "跳转"], ["Del", "删除"], ["F1", "操作"], ["Esc", "对话"]] :
-							[["Enter", "发送"], ["PgUp/PgDn", "滚动"], ["F1", "操作"], ["Ctrl+c", "取消"], ["Ctrl+w", "关闭"], ["Esc", "列表"]];
+							rosterFiltering ? [["Enter", "确认筛选"], [SIDE_MENU.label, "操作"], ["Esc", "清空"]] :
+							showRoster && loadState === "error" ? [["Enter", "重试"], [SIDE_MENU.label, "操作"], ["Esc", "返回"]] :
+							showRoster ? [["↑/↓", "选择"], ["Enter", "打开"], ["Del", "丢弃"], [SIDE_MENU.label, "操作"], ["Esc", "隐藏"]] :
+							c?.view.page === "history" ? [["↑/↓", "选择"], ["Enter", "跳转"], ["Del", "删除"], [SIDE_MENU.label, "操作"], ["Esc", "对话"]] :
+							[["Enter", "发送"], ["PgUp/PgDn", "滚动"], [SIDE_MENU.label, "操作"], ["Ctrl+c", "取消"], ["Ctrl+w", "关闭"], ["Esc", "列表"]];
 						const exitHint = confirmThread || c?.deleteCandidateId ? "y删除·Esc取消" : aux ? "Esc返回" :
-							rosterFiltering ? "Esc清空" : showRoster ? "F1操作·Esc退出" : "F1操作·Esc列表";
+							rosterFiltering ? "Esc清空" : SIDE_MENU.label + (showRoster ? "操作·Esc退出" : "操作·Esc列表");
 						const chatPage = !!c && !aux && c.view.page === "chat";
 						if (c) {
 							c.view.editor.setMaxHeight(compact ? 1 : Math.max(1, Math.min(6, Math.floor(height / 4))));
@@ -1923,7 +1924,7 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 						if (matchesKey(data, "ctrl+w")) { runAction("close"); return; }
 						if (matchesKey(data, "ctrl+c") && (c?.busy || showRoster && rosterEntry()?.controller?.busy)) { runAction("cancel"); return; }
 						if (actions) {
-							if (esc || matchesKey(data, "f1")) actions = undefined;
+							if (esc || matchesKey(data, SIDE_MENU.key)) actions = undefined;
 							else if (enter) { const item = actions[actionIndex]; if (item) runAction(item.id); }
 							else if (matchesKey(data, "up")) actionIndex = Math.max(0, actionIndex - 1);
 							else if (matchesKey(data, "down")) actionIndex = Math.min(actions.length - 1, actionIndex + 1);
@@ -1956,7 +1957,7 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 							}
 							repaint(); return;
 						}
-						if (matchesKey(data, "f1")) { const items = actionItems(c); if (items.length) { actions = items; actionIndex = 0; } repaint(); return; }
+						if (matchesKey(data, SIDE_MENU.key)) { const items = actionItems(c); if (items.length) { actions = items; actionIndex = 0; } repaint(); return; }
 						if (rosterFiltering && showRoster) {
 							if (esc) { rosterFilter = ""; rosterFiltering = false; }
 							else if (enter) rosterFiltering = false;
@@ -1990,7 +1991,7 @@ function createSideManager(ctx: ExtensionCommandContext, directory: string): Sid
 							if (matchesKey(data, "pageUp") || matchesKey(data, "pageDown")) { c.view.followTail = false; timeline.scroll(step); syncAnchor(c); }
 							// Empty input is still input: letters, punctuation, paste and editor navigation never become commands.
 							else if (composerVisible) c.view.editor.handleInput(data);
-							else c.setStatus("终端太小，输入不可用；F1 操作或 Esc 返回");
+							else c.setStatus("终端太小，输入不可用；" + SIDE_MENU.label + " 操作或 Esc 返回");
 						}
 						repaint();
 					},
@@ -2024,7 +2025,7 @@ export default function sideExtension(pi: ExtensionAPI): void {
 	pi.on("session_switch", () => { retire(manager); manager = undefined; });
 	pi.on("session_shutdown", async () => { const current = manager; manager = undefined; retire(current); await Promise.all([...retired]); });
 	pi.registerCommand("side", {
-		description: "独立 SIDE；/side [--model @role] [问题]；F1 操作，Esc 隐藏，Ctrl+w 关闭",
+		description: "独立 SIDE；/side [--model @role] [问题]；" + SIDE_MENU.label + " 操作，Esc 隐藏，Ctrl+w 关闭",
 		handler: async (args, ctx) => {
 			if (ctx.agent.kind !== "main") { ctx.ui.notify("禁止从 SIDE 或子代理再创建 SIDE。", "error"); return; }
 			if (!ctx.hasUI || ctx.mode !== "tui") { ctx.ui.notify("/side 需要交互式 OMP 终端视图。", "warning"); return; }
