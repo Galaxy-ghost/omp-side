@@ -1,0 +1,9 @@
+# This repository may live directly in OMP's shared extensions directory.
+# Track only SIDE and its maintenance files, never sibling extensions or state.
+/*
+!/.gitignore
+!/.gitattributes
+!/.editorconfig
+!/side.ts
+!/README.md
+!/CHANGELOG.md
